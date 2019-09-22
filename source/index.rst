@@ -3,18 +3,14 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to SpeechDocs's documentation!
+语音技术与工程应用
 ======================================
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+    :maxdepth: 2
 
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+    1.使用R328进行语音开发/index.rst
+    2.用python进行数字信号处理/index.rst
+    3.回声消除/index.rst 
+    4.语音增强/index.rst
+    5.麦克风阵列/index.rst
