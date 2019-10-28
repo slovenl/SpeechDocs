@@ -14,3 +14,4 @@
     3.回声消除/index.rst 
     4.语音增强/index.rst
     5.麦克风阵列/index.rst
+    6.声学设计/index.rst
