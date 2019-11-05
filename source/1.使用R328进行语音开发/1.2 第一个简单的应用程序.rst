@@ -1,0 +1,155 @@
+1.2 第一个简单的应用程序
+======================================
+
+1.2.1 编写HelloWolrd Package
+--------------------------------------
+
+**helloworld package makefile**：
+
+.. code-block:: makefile
+    :linenos:
+
+    #
+    # Copyright (C) 2012 OpenWrt.org
+    #
+    # This is free software, licensed under the GNU General Public License v2.
+    # See /LICENSE for more information.
+    #
+
+    include $(TOPDIR)/rules.mk
+    include $(BUILD_DIR)/kernel.mk
+
+    PKG_NAME:=helloworld
+    PKG_VERSION:=1
+    PKG_RELEASE:=1
+
+    PKG_BUILD_DIR := $(COMPILE_DIR)/$(PKG_NAME)
+    include $(BUILD_DIR)/package.mk
+
+    define Package/$(PKG_NAME)
+    SECTION:=utils
+    CATEGORY:=Allwinner
+    TITLE:= helloworld
+    endef
+
+    define Package/$(PKG_NAME)/description
+        helloworld
+    endef
+
+    define Build/Prepare
+        $(CP) -r ./files/src $(PKG_BUILD_DIR)/
+
+    endef
+
+    define Build/Compile
+        $(MAKE) -C $(PKG_BUILD_DIR)/src \
+            ARCH="$(TARGET_ARCH)" \
+            AR="$(TARGET_AR)" \
+            CC="$(TARGET_CC)" \
+            CXX="$(TARGET_CXX)" \
+            CFLAGS="$(TARGET_CFLAGS)" \
+            LDFLAGS="$(TARGET_LDFLAGS)" \
+            CONFIG_PREFIX="$(PKG_INSTALL_DIR)" \
+            all
+    endef
+
+    define Package/$(PKG_NAME)/install
+        $(INSTALL_DIR) $(1)/usr/bin
+        $(INSTALL_BIN) $(PKG_BUILD_DIR)/src/helloworld $(1)/usr/bin
+
+    endef
+
+    $(eval $(call BuildPackage,$(PKG_NAME)))  
+
+**helloworld src**：
+
+.. code-block:: c
+    :linenos:
+
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <unistd.h>
+
+    int main(void)
+    {
+        while(1)
+        {
+            printf("hello world!\n");
+            sleep(1);
+        }
+    }  
+
+**helloworld src makefile**：
+
+.. code-block:: makefile
+    :linenos:
+
+    target	= helloworld
+
+    SRCS = hello.c
+
+    INCLUDES =
+    LOCAL_CFLAGS = $(INCLUDES)
+
+    install:
+
+    $(target): $(SRCS)
+        $(CC) $(CFLAGS) $(LDFLAGS)  $^ -o $@ 
+
+    all: $(target) install
+    clean:
+        rm -rf $(target)
+
+1.2.2 编译与安装
+--------------------------------------
+
+**将helloworld目录放到package/allwineer下，进行如下配置**：
+
+.. code-block:: shell
+    :linenos:
+
+    make menuconfig
+        Allwinner
+            helloworld
+
+**对应的配置文件变化如下**：
+
+.. code-block:: shell
+    :linenos:
+
+    target/allwinner/drum-std/defconfig下增加
+    CONFIG_PACKAGE_helloworld=y
+
+**重新编译并打包**：
+
+.. code-block:: shell
+    :linenos:
+
+    make -j16 && pack
+
+**烧录后可以直接执行helloword程序**。
+
+**快速调试方法**：
+
+.. code-block:: shell
+    :linenos:
+
+    cd package/allwineer/helloworld
+    mm -B  //先clean该应用的临时文件再编译
+
+**生成的固件包路经为**：
+
+.. code-block:: shell
+    :linenos:
+
+    out/drum-std/packages/base/helloworld_1-1_sunxi.ipk
+
+    //推到开发板
+    adb push out/drum-std/packages/base/helloworld_1-1_sunxi.ipk /tmp
+
+    //安装该应用
+    opkg install /tmp/helloworld_1-1_sunxi.ipk
+
+    //也可以直接推送bin
+    out/drun-std/compile/target/helloworld/src/helloworld
+

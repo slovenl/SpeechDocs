@@ -1,0 +1,91 @@
+1.4 sysfs使用
+======================================
+
+sysfs是一个基于ram的内存文件系统（ramfs）。它提供了一种方法用于导出内核数据结构，属性，以及它们两者之间的联系到用户空间。
+
+当挂载gpio_test.ko驱动后，/sys目录变化如下：
+
+**platform device添加**
+
+.. code-block:: text
+    :linenos:
+
+    gpiotest {
+        device_type = "gpiotest";
+        status = "okay";
+        compatible = "gpio_test";
+        gpio-output-key = <0x39 0x7 0x4 0x1 0x1 0x1 0x1>;
+        gpio-input-key = <0x39 0x7 0x5 0x0 0xffffffff 0xffffffff 0xffffffff>;
+    };
+
+    ./sys/devices/platform/soc/gpiotest
+    ./sys/firmware/devicetree/base/soc@03000000/gpiotest
+    ./sys/bus/platform/devices/gpiotest -> ../../../devices/platform/soc/gpiotest
+    ./sys/bus/platform/drivers/gpio_test/gpiotest -> ../../../../devices/platform/soc/gpiotest
+
+**platform driver添加**
+
+.. code-block:: c
+    :linenos:
+
+    static const struct of_device_id gpio_test_dt_ids[] = {
+        {.compatible = "gpio_test"},
+        {},
+    };
+
+    static struct platform_driver gpio_test_driver = {
+        .probe		= gpio_test_probe,
+        .remove		= gpio_test_remove,
+        .driver		= {
+            .name	= "gpio_test",
+            .owner	= THIS_MODULE,
+            .pm	= NULL,
+            .of_match_table = gpio_test_dt_ids,
+        },
+    };
+
+    module_platform_driver(gpio_test_driver);
+
+    ./sys/bus/platform/drivers/gpio_test    
+
+**字符设备注册**
+
+.. code-block:: c
+    :linenos:
+
+    gpio_test_class = class_create(THIS_MODULE, "gpio_test");
+    device_create(gpio_test_class, NULL, dev, NULL, "gpio_test");
+
+    ./sys/devices/virtual/gpio_test/gpio_test
+    ./sys/class/gpio_test/gpio_test -> ../../devices/virtual/gpio_test/gpio_test    
+
+**借助sysfs可以进行快速调试**：
+
+.. code-block:: c
+    :linenos:
+
+    //gpio_test_probe函数添加如下内容
+    //sysfs
+    if (device_create_file(&pdev->dev, &dev_attr_msm_gpio)){
+        printk("error\n");
+    }
+        
+    static ssize_t msmgpio_show(struct device *dev,struct device_attribute *attr, char *buf){
+        return snprintf(buf,2,"%d",1);
+    }
+
+    static ssize_t msmgpio_store(struct device *dev,struct device_attribute *attr, const char *buf, size_t size){
+        printk("%s\n",buf);
+    }	    
+
+**调试方法**：
+
+.. code-block:: c
+    :linenos:
+
+    //sysfs生成如下文件
+    /sys/devices/platform/soc/gpiotest/driver/gpiotest/msm_gpio
+
+    //读写操作
+    cat msm_gpio
+    echo 2 >  msm_gpio    

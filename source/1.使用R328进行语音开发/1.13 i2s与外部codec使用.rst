@@ -1,0 +1,778 @@
+1.13 i2s与外部codec使用
+======================================
+
+1.13.1 配置文件
+--------------------------------------
+
+R328包含3路i2s接口。
+
+**内核配置**：
+
+.. code-block:: text
+    :linenos:
+
+    Devices Drivers
+    Sound card support
+    Advanced Linux Sound Architecture
+    Alsa for Soc audio support
+        Allwinner Soc Audio support
+        Allwinner Digital Audio support
+
+**sys_config.fex**：
+
+.. code-block:: text
+    :linenos:
+
+    ;-----------------------------------------------------------------------------
+    ;daudio_used :0:not use 1:use
+    ;daudio_master:
+    ;	1: SND_SOC_DAIFMT_CBM_CFM(codec clk & FRM master)		use
+    ;	2: SND_SOC_DAIFMT_CBS_CFM(codec clk slave & FRM master)		not use
+    ;	3: SND_SOC_DAIFMT_CBM_CFS(codec clk master & frame slave)	not use
+    ;	4: SND_SOC_DAIFMT_CBS_CFS(codec clk & FRM slave)		use
+    ;tdm_config:
+    ;	0 is pcm; 1 is i2s
+    ;audio_format:
+    ;	1:SND_SOC_DAIFMT_I2S(standard i2s format). use
+    ;	2:SND_SOC_DAIFMT_RIGHT_J(right justfied format).
+    ;	3:SND_SOC_DAIFMT_LEFT_J(left justfied format)
+    ;	4:SND_SOC_DAIFMT_DSP_A(pcm. MSB is available on 2nd BCLK rising edge after LRC rising edge). use
+    ;	5:SND_SOC_DAIFMT_DSP_B(pcm. MSB is available on 1nd BCLK rising edge after LRC rising edge)
+    ;signal_inversion:
+    ;	1:SND_SOC_DAIFMT_NB_NF(normal bit clock + frame)  use
+    ;	2:SND_SOC_DAIFMT_NB_IF(normal BCLK + inv FRM)
+    ;	3:SND_SOC_DAIFMT_IB_NF(invert BCLK + nor FRM)  use
+    ;	4:SND_SOC_DAIFMT_IB_IF(invert BCLK + FRM)
+    ;word_select_size 	:16bits/20bits/24bits/32bits
+    ;pcm_lrck_period 	:16/32/64/128/256
+    ;msb_lsb_first 		:0: msb first; 1: lsb first
+    ;sign_extend 		:0: zero pending; 1: sign extend
+    ;slot_width_select 	:8 bit width / 16 bit width / 32 bit width
+    ;frametype		:0: short frame = 1 clock width;  1: long frame = 2 clock width
+    ;mclk_div		:0: not output(normal setting this);
+    ;			:1/2/4/6/8/12/16/24/32/48/64/96/128/176/192:
+    ;			setting mclk as input clock to external codec,
+    ;			freq is pll_audio/mclk_div
+    ;tx_data_mode 		:0: 16bit linear PCM; (use) 1: reserved;
+    ;			:2: 8bit u-law; (no use) 3: 8bit a-law (no use)
+    ;rx_data_mode 		:0: 16bit linear PCM; (use) 1: reserved;
+    ;			:2: 8bit u-law; (no use) 3: 8bit a-law (no use)
+    ;-----------------------------------------------------------------------------
+    ;		NOTE :Make sure snddaudio0_used = 0x1, daudio0_used = 0x1
+    ;         if register the sound card snddaudio0.
+    ;-----------------------------------------------------------------------------
+
+    [snddaudio0]
+    snddaudio0_used = 0
+    daudio_master		= 4
+    audio_format		= 1
+    signal_inversion	= 1
+
+    [daudio0]
+    daudio0_used		= 0
+    slot_width_select 	= 32
+    pcm_lrck_period		= 64
+    msb_lsb_first		= 0
+    sign_extend 		= 0
+    frametype 		= 0
+    mclk_div		= 1
+    tdm_config		= 1
+    tx_data_mode 		= 0
+    rx_data_mode 		= 0
+    
+**设备树配置文件**：
+
+.. code-block:: text
+    :linenos:
+
+    sound@1 {
+        compatible = "allwinner,sunxi-daudio0-machine";
+        sunxi,daudio-controller = <0x40>;
+        sunxi,snddaudio-codec = "es7243";
+        sunxi,snddaudio-codec-dai = "es7243-codec-dai";
+        daudio_master = <0x4>;
+        audio_format = <0x1>;
+        signal_inversion = <0x1>;
+        status = "disabled";
+        device_type = "snddaudio0";
+    };
+
+    daudio@0x05090000 {
+        compatible = "allwinner,sunxi-daudio";
+        reg = <0x0 0x5090000 0x0 0x7c>;
+        clocks = <0x4 0x24 0x25>;
+        pinctrl-names = "default", "default", "sleep";
+        pinctrl-0 = <0x26>;
+        pinctrl-1 = <0x27>;
+        pinctrl-2 = <0x28>;
+        pcm_lrck_period = <0x40>;
+        slot_width_select = <0x20>;
+        frametype = <0x0>;
+        tdm_config = <0x1>;
+        tdm_num = <0x0>;
+        mclk_div = <0x1>;
+        status = "disabled";
+        linux,phandle = <0x40>;
+        phandle = <0x40>;
+        device_type = "daudio0";
+        msb_lsb_first = <0x0>;
+        sign_extend = <0x0>;
+        tx_data_mode = <0x0>;
+        rx_data_mode = <0x0>;
+            };
+
+    daudio0@0 {
+        allwinner,pins = "PB2", "PB3", "PB5", "PB13";
+        allwinner,function = "i2s0";
+        allwinner,pname = "i2s0_lrck", "i2s0_bclk", "i2s0_din0", "i2s0_mclk";
+        allwinner,muxsel = <0x5>;
+        allwinner,drive = <0x1>;
+        allwinner,pull = <0x0>;
+        linux,phandle = <0x26>;
+        phandle = <0x26>;
+    };
+
+    daudio0@1 {
+        allwinner,pins = "PB4";
+        allwinner,function = "i2s0";
+        allwinner,pname = "i2s0_dout0";
+        allwinner,muxsel = <0x4>;
+        allwinner,drive = <0x1>;
+        allwinner,pull = <0x0>;
+        linux,phandle = <0x27>;
+        phandle = <0x27>;
+    };
+
+    daudio0_sleep@2 {
+        allwinner,pins = "PB2", "PB3", "PB4", "PB5", "PB6", "PB7", "PB13";
+        allwinner,function = "io_disabled";
+        allwinner,muxsel = <0x7>;
+        allwinner,drive = <0x1>;
+        allwinner,pull = <0x0>;
+        linux,phandle = <0x28>;
+        phandle = <0x28>;
+    };
+
+    twi@0x05002400 {
+    ...
+    es7243@0 {
+        compatible = "mi,es7243";
+        reg = <0x13>;
+        status = "okay";
+    };
+    
+    };
+
+    **相关源代码位置**：
+
+.. code-block:: text
+    :linenos:
+
+    lichee/linux-4.9/sound/soc/codecs/es7243.c
+    lichee/linux-4.9/sound/soc/sunxi/sunxi-snddaudio.c 
+    lichee/linux-4.9/sound/soc/sunxi/sunxi-daudio.c
+
+    config SND_SUNXI_SOC_SUNXI_DAUDIO
+        tristate "Allwinner Digital Audio Support"
+        select SND_SUNXI_SOC
+        select SND_SOC_GENERIC_DMAENGINE_PCM
+        select SND_SUNXI_SOC_DAUDIO if (!SND_SUNXI_SOC_AHUB)
+        select REGMAP_MMIO
+        depends on ARCH_SUN50IW1 || ARCH_SUN50IW3 || ARCH_SUN50IW6 || ARCH_SUN8IW15 || ARCH_SUN30IW1 || ARCH_SUN8IW16 || ARCH_SUN8IW17 || ARCH_SUN8IW18 || ARCH_SUN50IW8 || (ARCH_SUN8IW8 && !SND_SOC_AC100)
+        help
+            Select Y or M to add support for I2S/PCM/TDM Module in the
+            Allwinner SoCs.
+            
+    obj-$(CONFIG_SND_SUNXI_SOC_SUNXI_DAUDIO) += sunxi-snddaudio.o
+    obj-$(CONFIG_SND_SUNXI_SOC_DAUDIO) += snd-soc-sunxi-daudio.o        
+
+1.13.2 代码分析
+--------------------------------------
+
+1.13.2.1 allwinner,sunxi-daudio
+``````````````````````````````````````
+
+**入口代码**：
+
+.. code-block:: c
+    :linenos:
+
+    #define	DRV_NAME	"sunxi-daudio"
+
+    static const struct of_device_id sunxi_daudio_of_match[] = {
+        {
+            .compatible = "allwinner,sunxi-daudio",
+            .data = &sunxi_daudio,
+        },
+        {
+            .compatible = "allwinner,sunxi-tdmhdmi",
+            .data = &sunxi_tdmhdmi,
+        },
+        {},
+    };
+
+    static struct platform_driver sunxi_daudio_driver = {
+        .probe = sunxi_daudio_dev_probe,
+        .remove = __exit_p(sunxi_daudio_dev_remove),
+        .driver = {
+            .name = DRV_NAME,
+            .owner = THIS_MODULE,
+            .of_match_table = sunxi_daudio_of_match,
+        },
+    };
+
+    module_platform_driver(sunxi_daudio_driver);
+
+**sunxi_daudio_dev_probe**：
+
+获取设备描述符的信息：
+
+.. code-block:: c
+    :linenos:
+
+    struct sunxi_daudio_info *sunxi_daudio;
+    sunxi_daudio = devm_kzalloc(&pdev->dev,sizeof(struct sunxi_daudio_info),GFP_KERNEL);
+    dev_set_drvdata(&pdev->dev, sunxi_daudio);
+
+    sunxi_daudio->dev = &pdev->dev;
+    sunxi_daudio->pdata = devm_kzalloc(&pdev->dev,sizeof(struct sunxi_daudio_platform_data),GFP_KERNEL);
+
+    static struct sunxi_daudio_platform_data sunxi_daudio = {
+        .daudio_type = SUNXI_DAUDIO_EXTERNAL_TYPE,
+        .external_type = 1,
+    };
+    memcpy(sunxi_daudio->pdata, match->data,sizeof(struct sunxi_daudio_platform_data));
+
+    //reg = <0x0 0x5090000 0x0 0x7c>;
+    of_address_to_resource(np, 0, &(sunxi_daudio->res));
+
+    //clocks = <0x4 0x24 0x25>;
+    sunxi_daudio->pllclk = of_clk_get(np, 0);
+    sunxi_daudio->moduleclk = of_clk_get(np, 1);
+
+    clk_prepare_enable(sunxi_daudio->pllclk);
+    clk_prepare_enable(sunxi_daudio->moduleclk);
+
+    sunxi_daudio->pinctrl = devm_pinctrl_get(&pdev->dev);
+    sunxi_daudio->pinstate = pinctrl_lookup_state(sunxi_daudio->pinctrl, PINCTRL_STATE_DEFAULT);
+    sunxi_daudio->pinstate_sleep = pinctrl_lookup_state(sunxi_daudio->pinctrl, PINCTRL_STATE_SLEEP);
+    pinctrl_select_state(sunxi_daudio->pinctrl,sunxi_daudio->pinstate);
+
+    of_property_read_u32(np, "tdm_num", &temp_val); //i2s number 第几路i2s
+    sunxi_daudio->pdata->tdm_num = temp_val;
+
+    sunxi_daudio->playback_dma_param.src_maxburst = 4;
+    sunxi_daudio->playback_dma_param.dst_maxburst = 4;
+    sunxi_daudio->capture_dma_param.dma_addr =
+                    sunxi_daudio->res.start + SUNXI_DAUDIO_RXFIFO;
+    sunxi_daudio->capture_dma_param.src_maxburst = 4;
+    sunxi_daudio->capture_dma_param.dst_maxburst = 4;
+    sunxi_daudio->playback_dma_param.dma_addr =
+                    sunxi_daudio->res.start + SUNXI_DAUDIO_TXFIFO;
+    SUNXI_DAUDIO_DRQDST(sunxi_daudio, 0);
+
+    of_property_read_string(np, "daudio_regulator",&sunxi_daudio->vol_supply.regulator_name);
+    regulator_set_voltage(sunxi_daudio->vol_supply.daudio_regulator,3300000, 3300000);
+    regulator_enable(sunxi_daudio->vol_supply.daudio_regulator);
+
+    of_property_read_u32(np, "daudio_master", &temp_val);
+    sunxi_daudio->pdata->daudio_master = temp_val;
+
+    of_property_read_u32(np, "audio_format", &temp_val);
+    sunxi_daudio->pdata->audio_format = temp_val;
+
+    of_property_read_u32(np, "signal_inversion", &temp_val);
+    sunxi_daudio->pdata->signal_inversion = temp_val;
+
+    of_property_read_u32(np, "pcm_lrck_period", &temp_val);
+    sunxi_daudio->pdata->pcm_lrck_period = temp_val;
+
+    of_property_read_u32(np, "msb_lsb_first", &temp_val);
+    sunxi_daudio->pdata->msb_lsb_first = temp_val;
+
+    of_property_read_u32(np, "slot_width_select", &temp_val);
+    sunxi_daudio->pdata->slot_width_select = temp_val;
+
+    of_property_read_u32(np, "frametype", &temp_val);
+    sunxi_daudio->pdata->frame_type = temp_val;
+
+    of_property_read_u32(np, "sign_extend", &temp_val);
+    sunxi_daudio->pdata->sign_extend = temp_val;
+
+    of_property_read_u32(np, "tx_data_mode", &temp_val);
+    sunxi_daudio->pdata->tx_data_mode = temp_val;
+
+    of_property_read_u32(np, "rx_data_mode", &temp_val);
+    sunxi_daudio->pdata->rx_data_mode = temp_val;
+
+    of_property_read_u32(np, "tdm_config", &temp_val);
+    sunxi_daudio->pdata->tdm_config = temp_val;
+
+    of_property_read_u32(np, "mclk_div", &temp_val);
+    sunxi_daudio->pdata->mclk_div = temp_val;
+
+    sunxi_daudio->memregion = devm_request_mem_region(&pdev->dev,
+                                        sunxi_daudio->res.start,
+                                        resource_size(&sunxi_daudio->res),
+                                        DRV_NAME);
+    sunxi_daudio->membase = ioremap(sunxi_daudio->memregion->start,resource_size(sunxi_daudio->memregion));
+    sunxi_daudio->regmap = devm_regmap_init_mmio(&pdev->dev,sunxi_daudio->membase,&sunxi_daudio_regmap_config);
+
+注册到dai list：
+
+.. code-block:: c
+    :linenos:
+
+    #define	DRV_NAME	"sunxi-daudio"
+    static const struct snd_soc_component_driver sunxi_daudio_component = {
+        .name		= DRV_NAME,
+        .controls	= sunxi_daudio_controls,
+        .num_controls	= ARRAY_SIZE(sunxi_daudio_controls),
+    };
+
+    static struct snd_soc_dai_ops sunxi_daudio_dai_ops = {
+        .hw_params = sunxi_daudio_hw_params,
+        .set_sysclk = sunxi_daudio_set_sysclk,
+        .set_clkdiv = sunxi_daudio_set_clkdiv,
+        .set_fmt = sunxi_daudio_set_fmt,
+        .startup = sunxi_daudio_dai_startup,
+        .trigger = sunxi_daudio_trigger,
+        .prepare = sunxi_daudio_prepare,
+        .shutdown = sunxi_daudio_shutdown,
+    };
+
+    static struct snd_soc_dai_driver sunxi_daudio_dai = {
+        .probe = sunxi_daudio_probe,
+        .suspend = sunxi_daudio_suspend,
+        .resume = sunxi_daudio_resume,
+        .remove = sunxi_daudio_remove,
+        .playback = {
+            .channels_min = 1,
+            .channels_max = 8,
+            .rates = SUNXI_DAUDIO_RATES,
+            .formats = SNDRV_PCM_FMTBIT_S16_LE
+                | SNDRV_PCM_FMTBIT_S20_3LE
+                | SNDRV_PCM_FMTBIT_S24_LE
+                | SNDRV_PCM_FMTBIT_S32_LE,
+        },
+        .capture = {
+            .channels_min = 1,
+            .channels_max = 8,
+            .rates = SUNXI_DAUDIO_RATES,
+            .formats = SNDRV_PCM_FMTBIT_S16_LE
+                | SNDRV_PCM_FMTBIT_S20_3LE
+                | SNDRV_PCM_FMTBIT_S24_LE
+                | SNDRV_PCM_FMTBIT_S32_LE,
+        },
+        .ops = &sunxi_daudio_dai_ops,
+    };
+
+    snd_soc_register_component(&pdev->dev, &sunxi_daudio_component,&sunxi_daudio_dai, 1);
+
+注册到platform list：
+
+.. code-block:: c
+    :linenos:
+
+    static struct snd_pcm_ops sunxi_pcm_ops = {
+        .open		= sunxi_pcm_open,
+        .close		= snd_dmaengine_pcm_close_release_chan,
+        .ioctl		= snd_pcm_lib_ioctl,
+        .hw_params	= sunxi_pcm_hw_params,
+        .hw_free	= sunxi_pcm_hw_free,
+        .trigger	= sunxi_pcm_trigger,
+        .pointer	= snd_dmaengine_pcm_pointer,
+        .mmap		= sunxi_pcm_mmap,
+    };
+
+    static struct snd_soc_platform_driver sunxi_soc_platform = {
+        .ops		= &sunxi_pcm_ops,
+        .pcm_new	= sunxi_pcm_new,
+        .pcm_free	= sunxi_pcm_free_dma_buffers,
+    };
+
+    snd_soc_register_platform(dev, &sunxi_soc_platform);
+
+1.13.2.2 外部codec es7243
+``````````````````````````````````````
+
+**入口函数**：
+
+.. code-block:: c
+    :linenos:
+
+    static const struct i2c_device_id es7243_i2c_id[] = {
+        { "es7243", 0 },
+        {}
+    };
+
+    static const struct of_device_id es7243_of_id[] = {
+        {.compatible = "mi,es7243",},
+    };
+    MODULE_DEVICE_TABLE(of, es7243_of_id);
+
+    static struct  i2c_driver es7243_i2c_driver = {
+        .driver = {
+            .name = "es7243",
+            .of_match_table = es7243_of_id,
+            .owner = THIS_MODULE,
+        },
+        .probe = es7243_i2c_probe,
+        .remove = es7243_i2c_remove,
+        .id_table = es7243_i2c_id,
+    };
+    module_i2c_driver(es7243_i2c_driver); //注册i2c driver
+
+**es7243_i2c_probe**：\
+当i2c drvier与设备树中i2c总线下的i2c设备名匹配时，probe函数调用。
+
+.. code-block:: c
+    :linenos:
+
+    //保存生成的i2c client
+    static struct i2c_client *es7243_client;
+    es7243_client = client;
+
+    //regmap操作
+    devm_regmap_init_i2c(client, &es7243_regmap);
+
+    //私有数据
+    struct es7243_priv *es7243;
+    dev_set_name(&client->dev, "%s", "es7243");
+    i2c_set_clientdata(client, es7243);
+
+    //注册该codec到alsa，分别添加到dai list和codec list
+    snd_soc_register_codec(&client->dev, &soc_codec_dev_es7243, &es7243_dai, 1);
+
+alsa注册相关代码如下：
+
+.. code-block:: c
+    :linenos:
+
+    static const struct snd_soc_codec_driver soc_codec_dev_es7243 = {
+        .probe = es7243_probe,
+        .remove = es7243_remove,
+        .suspend = es7243_suspend,
+        .resume = es7243_resume,
+    };
+
+    static struct snd_soc_dai_driver es7243_dai = {
+        .name = "es7243-codec-dai",
+        .playback = {
+            .stream_name = "HIFI Playback",
+            .channels_min = 1,
+            .channels_max = 2,
+            .rates = ES7243_RATES,
+            .formats = ES7243_FORMATS,
+        },
+        .capture = {
+            .stream_name = "Capture",
+            .channels_min = 1,
+            .channels_max = 2,
+            .rates = ES7243_RATES,
+            .formats = ES7243_FORMATS,
+        },
+        .ops = &es7243_dai_ops,
+    };
+
+    static const struct snd_soc_dai_ops es7243_dai_ops = {
+        .hw_params = es7243_hw_params,
+        .set_sysclk = es7243_set_dai_sysclk,
+        .set_fmt = es7243_set_dai_fmt,
+        .prepare = es7243_prepare,
+    };    
+
+**寄存器操作**：\
+es7243寄存器通过i2c总线进行操作。
+
+devm_regmap_init_i2c函数分析
+
+.. code-block:: c
+    :linenos:
+
+    static const struct regmap_config es7243_regmap = {
+        .reg_bits = 8,    //Number of bits in a register address, mandatory. 寄存器地址宽度
+        .val_bits = 8,    //Number of bits in a register value, mandatory.   寄存器值宽度
+
+        .max_register = ES7243_REGISTER_COUNT,
+        .reg_defaults = es7243_reg_defaults,
+        .num_reg_defaults = ARRAY_SIZE(es7243_reg_defaults),
+        .cache_type = REGCACHE_RBTREE,
+    };
+
+    //绑定了regmap操作的i2c client
+    es7243->regmap = devm_regmap_init_i2c(client, &es7243_regmap);
+
+3.0linux内核版本中，codec driver是直接调用i2c的i2c_master_send函数与i2c_transfer函数来实现i2c的读写。\
+3.10版本开始出现了regmap的接口，这个regmap将i2c、spi、mmio、irq都抽象出统一的接口regmap_read、regmap_write、regmap_update_bits等接口。\
+regmap_init完成了如下操作：
+
+* 注册方法regmap_bus和对象i2c：通过把struct regmap_bus regmap_i2c和i2c->dev注册到regmap模块中去，\
+  而regmap_bus中已经实现了read和write函数（调用的就是i2c_master_send与i2c_transfer）
+* 当调用regmap_read或者regmap_write的时候，这两个函数会取出struct regmap中的content即i2c，\
+  并调用之前注册的regmap_bus中的read和write函数来实现读和写。 
+
+i2c寄存器操作如下：
+
+.. code-block:: c
+    :linenos:
+
+    static int es7243_probe(struct snd_soc_codec *codec)
+    {
+        int i;
+        int ret = 0;
+            snd_soc_write(codec, 0x00, 0x41);
+            snd_soc_write(codec, 0x06, 0x18);
+            snd_soc_write(codec, 0x05, 0x1B);
+            snd_soc_write(codec, 0x01, 0x0C);
+            snd_soc_write(codec, 0x04, 0x04);
+            snd_soc_write(codec, 0x08, 0x11);
+            snd_soc_write(codec, 0x06, 0x00);
+            snd_soc_write(codec, 0x05, 0x13);
+        return 0;
+    }    
+
+继续来看snd_soc_write内部操作是什么
+
+.. code-block:: c
+    :linenos:
+
+    int snd_soc_write(struct snd_soc_codec *codec, unsigned int reg, unsigned int val)
+    {
+        return snd_soc_component_write(&codec->component, reg, val);
+    }
+
+    int snd_soc_component_write(struct snd_soc_component *component, unsigned int reg, unsigned int val)
+    {
+        if (component->regmap)
+            return regmap_write(component->regmap, reg, val);
+        else if (component->write)
+            return component->write(component, reg, val);
+        else
+            return -EIO;
+    }
+
+可以得出snd_soc_write实际调用的是regmap_write函数。
+
+1.13.2.3 allwinner,sunxi-daudio0-machine
+```````````````````````````````````````````
+
+**入口函数**：
+
+.. code-block:: c
+    :linenos:
+
+    static const struct of_device_id sunxi_snddaudio_of_match[] = {
+        { .compatible = "allwinner,sunxi-daudio0-machine", },
+        { .compatible = "allwinner,sunxi-daudio1-machine", },
+        { .compatible = "allwinner,sunxi-daudio2-machine", },
+        { .compatible = "allwinner,sunxi-daudio3-machine", },
+        {},
+    };
+
+    static struct platform_driver sunxi_snddaudio_driver = {
+        .driver = {
+            .name   = "snddaudio",
+            .owner  = THIS_MODULE,
+            .pm     = &snd_soc_pm_ops,
+            .of_match_table = sunxi_snddaudio_of_match,
+        },
+        .probe  = sunxi_snddaudio_dev_probe,
+        .remove = sunxi_snddaudio_dev_remove,
+    };
+
+    static int __init sunxi_snddaudio_driver_init(void)
+    {
+        return platform_driver_register(&sunxi_snddaudio_driver);
+    }
+
+**sunxi_snddaudio_dev_probe**：
+
+.. code-block:: c
+    :linenos:
+    
+    //私有数据
+    struct sunxi_snddaudio_priv {
+        struct snd_soc_card *card;
+        struct platform_data pdata;
+    };
+    struct sunxi_snddaudio_priv *snddaudio_priv;
+    snddaudio_priv = devm_kzalloc(&pdev->dev,sizeof(struct sunxi_snddaudio_priv), GFP_KERNEL);
+
+    //snd_soc_card
+    snddaudio_priv->card = devm_kzalloc(&pdev->dev,sizeof(struct snd_soc_card),GFP_KERNEL);
+    static struct snd_soc_card snd_soc_sunxi_snddaudio = {
+        .name           = "snddaudio",
+        .owner          = THIS_MODULE,
+    };
+    memcpy(card, &snd_soc_sunxi_snddaudio, sizeof(struct snd_soc_card));
+    card->dev = &pdev->dev;
+
+    //dai link
+    static struct snd_soc_dai_link sunxi_snddaudio_dai_link = {
+        .name           = "sysvoice",
+        .stream_name    = "SUNXI-AUDIO",
+        .cpu_dai_name   = "sunxi-daudio",
+        .platform_name  = "sunxi-daudio",
+        .codec_dai_name = "snd-soc-dummy-dai",
+        .codec_name     = "snd-soc-dummy",
+        .init           = sunxi_snddaudio_init,
+        .ops            = &sunxi_snddaudio_ops,
+    };
+
+    dai_link = devm_kzalloc(&pdev->dev,sizeof(struct snd_soc_dai_link), GFP_KERNEL);
+    memcpy(dai_link, &sunxi_snddaudio_dai_link,sizeof(struct snd_soc_dai_link));
+
+    //设备树参数分析
+    of_property_read_u32(np, "audio_format", &temp_val);
+    of_property_read_u32(np, "signal_inversion", &temp_val);
+    of_property_read_u32(np, "daudio_master", &temp_val);
+
+    //更新codec信息
+    dai_link->cpu_of_node = of_parse_phandle(np,"sunxi,daudio-controller", 0);
+    of_property_read_string(np, "sunxi,snddaudio-codec",&dai_link->codec_name);
+    of_property_read_string(np, "sunxi,snddaudio-codec-dai",&dai_link->codec_dai_name);
+
+    //注册声卡
+    snd_soc_card_set_drvdata(card, snddaudio_priv);
+    snd_soc_register_card(card);
+
+1.13.2.4 dummy codec
+```````````````````````````````````````````
+
+当没有外接codec，只想使用i2s功能时，可以使用内核自带的dummy codec完成codec的注册。
+
+**入口函数**：
+
+.. code-block:: c
+    :linenos:
+
+    //sound/soc/soc-utils.c
+
+    static struct platform_driver soc_dummy_driver = {
+        .driver = {
+            .name = "snd-soc-dummy",
+        },
+        .probe = snd_soc_dummy_probe,
+        .remove = snd_soc_dummy_remove,
+    };
+
+    int __init snd_soc_util_init(void)
+    {
+        int ret;
+
+        soc_dummy_dev = platform_device_register_simple("snd-soc-dummy", -1, NULL, 0);
+        if (IS_ERR(soc_dummy_dev))
+            return PTR_ERR(soc_dummy_dev);
+
+        ret = platform_driver_register(&soc_dummy_driver);
+        if (ret != 0)
+            platform_device_unregister(soc_dummy_dev);
+
+        return ret;
+    }
+
+**snd_soc_dummy_probe**：
+
+.. code-block:: c
+    :linenos:
+
+    //注册dummy codec
+    snd_soc_register_codec(&pdev->dev, &dummy_codec, &dummy_dai, 1);
+
+    //注册到alsa platform list
+    snd_soc_register_platform(&pdev->dev, &dummy_platform);
+
+    static struct snd_soc_codec_driver dummy_codec;
+
+    static struct snd_soc_dai_driver dummy_dai = {
+        .name = "snd-soc-dummy-dai",
+        .playback = {
+            .stream_name	= "Playback",
+            .channels_min	= 1,
+            .channels_max	= 384,
+            .rates		= STUB_RATES,
+            .formats	= STUB_FORMATS,
+        },
+        .capture = {
+            .stream_name	= "Capture",
+            .channels_min	= 1,
+            .channels_max	= 384,
+            .rates = STUB_RATES,
+            .formats = STUB_FORMATS,
+        },
+    };
+
+dummy codec没有提供任何实质的codec操作，仅仅为了能和i2s建立连接产生声卡。
+
+1.13.3 调试与使用方法
+--------------------------------------
+
+实际上我们的开发板上没有ES7243，而且i2s0也没有打开，根据项目需求我们仅仅想使用i2s0功能，没有codec。
+
+**sys_config.fex修改如下**：
+
+.. code-block:: text
+    :linenos:
+
+    [snddaudio0]
+    snddaudio0_used = 1
+    sunxi,snddaudio-codec =
+    sunxi,snddaudio-codec-dai =
+    daudio_master		= 4
+    audio_format		= 1
+    signal_inversion	= 1
+
+    [daudio0]
+    daudio0_used		= 1
+    slot_width_select 	= 32
+    pcm_lrck_period		= 64
+    msb_lsb_first		= 0
+    sign_extend 		= 0
+    frametype 		= 0
+    mclk_div		= 1
+    tdm_config		= 1
+    tx_data_mode 		= 0
+    rx_data_mode 		= 0
+
+**对应的设备树文件变化**：
+
+.. code-block:: text
+    :linenos:
+
+    sound@1 {
+        compatible = "allwinner,sunxi-daudio0-machine";
+        sunxi,daudio-controller = <0x40>;
+        daudio_master = <0x4>;
+        audio_format = <0x1>;
+        signal_inversion = <0x1>;
+        status = "okay";
+        device_type = "snddaudio0";
+        sunxi,snddaudio-codec;
+        sunxi,snddaudio-codec-dai;
+    };
+
+**当获取不到sunxi,snddaudio-codec时，读取i2s序号，生成声卡**
+
+.. code-block:: c
+    :linenos:
+
+    ret = of_property_read_string(np, "sunxi,snddaudio-codec", &dai_link->codec_name);
+        
+    if (!ret) {
+    ... 
+    }else{
+    if (dai_link->cpu_of_node && of_property_read_u32(dai_link->cpu_of_node, "tdm_num", &temp_val) >= 0)
+                sprintf(name+9, "%u", temp_val);
+    }
+
+**测试：重新pack后更新设备树烧录固件**
+
+.. code-block:: shell
+    :linenos:
+
+    aplay -Dhw:snddaudio0 /tmp/test.wav
+    arecord -Dhw:snddaudio0 -f S16_LE
+
+
+

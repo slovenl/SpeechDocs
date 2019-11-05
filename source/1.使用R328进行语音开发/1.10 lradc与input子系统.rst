@@ -1,0 +1,361 @@
+1.10 lradc与input子系统
+======================================
+
+1.10.1 配置文件
+--------------------------------------
+
+**sys_config.fex**：没有该选项
+
+**设备树描述**：
+
+.. code-block:: text
+    :linenos:
+
+    keyboard {
+        compatible = "allwinner,keyboard_1350mv";
+        reg = <0x0 0x5070800 0x0 0x400>;
+        interrupts = <0x0 0x32 0x0>;
+        status = "okay";
+        key_cnt = <0x5>;
+        key0 = <0xa4 0x73>;
+        key1 = <0x19f 0x72>;
+        key2 = <0x286 0x8b>;
+        key3 = <0x384 0x1c>;
+        key4 = <0x485 0x66>;
+        wakeup-source;
+    }; 
+
+**源码位置和内核配置**：
+
+.. code-block:: text
+    :linenos:
+
+    lichee/linux-4.9/drivers/input/keyboard/sunxi-keyboard.c
+
+    obj-$(CONFIG_KEYBOARD_SUNXI)		+= sunxi-keyboard.o
+
+    config KEYBOARD_SUNXI
+        tristate "softwinnner KEY BOARD support"
+        help
+        Say Y here to enable the keyboard, support 7 keys.
+        based on verify board.
+
+1.10.2 代码分析
+--------------------------------------
+
+**入口函数**：
+
+.. code-block:: c
+    :linenos:
+
+    static struct of_device_id const sunxi_keyboard_of_match[] = {
+        { .compatible = "allwinner,keyboard_1350mv",
+            .data = &disc_1350 },
+        { .compatible = "allwinner,keyboard_1200mv",
+            .data = &disc_1200 },
+        { .compatible = "allwinner,keyboard_2000mv",
+            .data = &disc_2000 },
+        { },
+    };
+    MODULE_DEVICE_TABLE(of, sunxi_keyboard_of_match);
+
+    static struct platform_driver sunxi_keyboard_driver = {
+        .probe  = sunxi_keyboard_probe,
+        .remove = sunxi_keyboard_remove,
+        .driver = {
+            .name   = "sunxi-keyboard",
+            .owner  = THIS_MODULE,
+    #ifdef CONFIG_PM
+            .pm	= SUNXI_KEYBOARD_PM_OPS,
+    #endif
+            .of_match_table = of_match_ptr(sunxi_keyboard_of_match),
+        },
+    };
+    module_platform_driver(sunxi_keyboard_driver);
+
+**sunxi_keyboard_probe**：
+
+.. code-block:: c
+    :linenos:
+
+    //私有数据
+    struct sunxi_key_data *key_data;
+    key_data = kzalloc(sizeof(*key_data), GFP_KERNEL);
+
+    //获取设备树信息
+    key_data->reg_base = of_iomap(np, 0)
+    key_data->irq_num = irq_of_parse_and_map(np, 0);
+
+    //设备树键值信息
+    of_property_read_u32(np, "key_cnt", &key_num)
+
+    for (i = 0; i < key_num; i++) {
+        sprintf(key_data->key_name, "key%d", i);
+        of_property_read_u32_array(np, key_data->key_name,val, ARRAY_SIZE(val));
+        key_vol[i] = val[0];                //电压
+        key_data->scankeycodes[i] = val[1]; //键值
+    }
+
+    key_vol[key_num] = disc->measure; //1350
+    for (i = 0; i < key_num; i++)
+        key_vol[i] += (key_vol[i+1] - key_vol[i])/2; //每个键值电压的上限
+
+    for (i = 0; i < 64; i++) {     //64 * 21 = 1344 1350个电压分为64个段
+        if (i * disc->resol > key_vol[j]) 
+            j++;
+        keypad_mapindex[i] = j;    //每个段对应的键值
+    }	
+
+    //待机唤醒是否使能
+    key_data->wakeup = of_property_read_bool(np, "wakeup-source");
+    device_init_wakeup(&pdev->dev, key_data->wakeup);
+
+    //分配一个input_dev结构体并初始化
+    static struct input_dev *sunxikbd_dev;
+    sunxikbd_dev = input_allocate_device();
+
+    #define INPUT_DEV_NAME          ("sunxi-keyboard")
+    sunxikbd_dev->name = INPUT_DEV_NAME;
+    sunxikbd_dev->phys = "sunxikbd/input0";
+    sunxikbd_dev->id.bustype = BUS_HOST;
+    sunxikbd_dev->id.vendor = 0x0001;
+    sunxikbd_dev->id.product = 0x0001;
+    sunxikbd_dev->id.version = 0x0100;
+
+    //分别用来设置设备所产生的事件以及上报的按键值。Struct iput_dev中有两个成员，一个是evbit.一个是keybit.
+    //分别用表示设备所支持的动作和键值。
+    sunxikbd_dev->evbit[0] = BIT_MASK(EV_KEY);
+    for (i = 0; i < KEY_MAX_CNT; i++)
+        set_bit(key_data->scankeycodes[i], sunxikbd_dev->keybit);
+
+    //ADC硬件相关设置
+    mode = ADC0_DOWN_INT_SET | ADC0_UP_INT_SET | ADC0_DATA_INT_SET;
+    para = LRADC_ADC0_DOWN_EN | LRADC_ADC0_UP_EN | LRADC_ADC0_DATA_EN;
+    sunxi_keyboard_int_set(key_data->reg_base, mode, para);
+    mode = CONCERT_DLY_SET | ADC_CHAN_SET | KEY_MODE_SET
+        | LRADC_HOLD_SET | LEVELB_VOL_SET
+        | LRADC_SAMPLE_SET | LRADC_EN_SET;
+    para = FIRST_CONCERT_DLY|LEVELB_VOL|KEY_MODE_SELECT
+        |LRADC_HOLD_EN|ADC_CHAN_SELECT
+        |LRADC_SAMPLE_250HZ|LRADC_EN;
+    sunxi_keyboard_ctrl_set(key_data->reg_base, mode, para);
+
+    //申请中断
+    request_irq(key_data->irq_num, sunxi_isr_key, IRQF_NO_SUSPEND | IRQF_TRIGGER_HIGH,"sunxikbd", key_data))
+
+    //注册到input子系统
+    input_register_device(key_data->input_dev);    
+
+**sunxi_isr_key**：
+
+.. code-block:: c
+    :linenos:
+
+    reg_val = sunxi_keyboard_read_ints(key_data->reg_base);
+
+    //按下value为1
+    if (reg_val & LRADC_ADC0_DOWNPEND)
+            pr_debug("key down\n");
+            
+    if (reg_val & LRADC_ADC0_DATAPEND) {
+        ...
+        key_val = sunxi_keyboard_read_data(key_data->reg_base);
+        key_data->key_code = keypad_mapindex[key_val&0x3f];
+        ...
+        input_report_key(key_data->input_dev, key_data->scankeycodes[key_data->key_code], 1);
+        input_sync(key_data->input_dev);
+    }
+
+    //抬起value为0
+    if (reg_val & LRADC_ADC0_UPPEND) {
+        input_report_key(key_data->input_dev,key_data->scankeycodes[key_data->key_code], 0);
+        input_sync(key_data->input_dev);
+    }
+
+    //清中断
+    sunxi_keyboard_clr_ints(key_data->reg_base, reg_val);
+
+1.10.3 测试与使用
+--------------------------------------
+
+**查询已经注册的input设备**：
+
+.. code-block:: shell
+    :linenos:
+
+    root@TinaLinux:/dev/input# cat /proc/bus/input/devices 
+    I: Bus=0019 Vendor=0001 Product=0001 Version=0100
+    N: Name="sunxi-keyboard"
+    P: Phys=sunxikbd/input0
+    S: Sysfs=/devices/virtual/input/input0
+    U: Uniq=
+    H: Handlers=kbd event0 autohotplug 
+    B: PROP=0
+    B: EV=3
+    B: KEY=800 c0040 0 0 10000000
+
+    I: Bus=0006 Vendor=0002 Product=0005 Version=0100
+    N: Name="sunxi-gpio-ir"
+    P: Phys=gpioIR/input1
+    S: Sysfs=/devices/virtual/input/input1
+    U: Uniq=
+    H: Handlers=sysrq kbd event1 
+    B: PROP=0
+    B: EV=3
+    B: KEY=ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff ffffffff fffffffe    
+
+**获取键值**：
+
+.. code-block:: shell
+    :linenos:
+
+    cat /dev/input/event0 | hexdump -C
+
+    00000000  47 4b 08 5d b5 9e 09 00  01 00 73 00 01 00 00 00  |GK.]......s.....|
+    00000010  47 4b 08 5d b5 9e 09 00  00 00 00 00 00 00 00 00  |GK.]............|
+    00000020  49 4b 08 5d ea 6c 03 00  01 00 73 00 00 00 00 00  |IK.].l....s.....|
+    00000030  49 4b 08 5d ea 6c 03 00  00 00 00 00 00 00 00 00  |IK.].l..........|
+
+    000000c0  68 4b 08 5d 51 8f 02 00  01 00 66 00 01 00 00 00  |hK.]Q.....f.....|
+    000000d0  68 4b 08 5d 51 8f 02 00  00 00 00 00 00 00 00 00  |hK.]Q...........|
+    000000e0  68 4b 08 5d 95 3a 04 00  01 00 66 00 00 00 00 00  |hK.].:....f.....|
+    000000f0  68 4b 08 5d 95 3a 04 00  00 00 00 00 00 00 00 00  |hK.].:..........|
+
+    00000400  ae 4b 08 5d 16 89 0c 00  01 00 72 00 01 00 00 00  |.K.]......r.....|
+    00000410  ae 4b 08 5d 16 89 0c 00  00 00 00 00 00 00 00 00  |.K.]............|
+    00000420  ae 4b 08 5d 45 ba 0d 00  01 00 72 00 00 00 00 00  |.K.]E.....r.....|
+    00000430  ae 4b 08 5d 45 ba 0d 00  00 00 00 00 00 00 00 00  |.K.]E...........|
+
+    00000440  b8 4b 08 5d 4f 12 02 00  01 00 1c 00 01 00 00 00  |.K.]O...........|
+    00000450  b8 4b 08 5d 4f 12 02 00  00 00 00 00 00 00 00 00  |.K.]O...........|
+    00000460  b8 4b 08 5d 63 c9 02 00  01 00 1c 00 00 00 00 00  |.K.]c...........|
+    00000470  b8 4b 08 5d 63 c9 02 00  00 00 00 00 00 00 00 00  |.K.]c...........|
+
+    00000480  c7 4b 08 5d b6 fd 0e 00  01 00 8b 00 01 00 00 00  |.K.]............|
+    00000490  c7 4b 08 5d b6 fd 0e 00  00 00 00 00 00 00 00 00  |.K.]............|
+    000004a0  c8 4b 08 5d 98 af 00 00  01 00 8b 00 00 00 00 00  |.K.]............|
+    000004b0  c8 4b 08 5d 98 af 00 00  00 00 00 00 00 00 00 00  |.K.]............|
+
+**选取一行进行分析**：
+
+.. code-block:: c
+    :linenos:
+
+    struct input_event {
+        struct timeval time;
+        __u16 type;
+        __u16 code;
+        __s32 value;
+    };
+
+    type:
+    #define EV_SYN			0x00
+    #define EV_KEY			0x01
+    #define EV_REL			0x02
+    #define EV_ABS			0x03
+    #define EV_REP			0x14
+
+    00000000  47 4b 08 5d b5 9e 09 00  01 00   73 00     01 00 00 00  |GK.]......s.....|
+            ----------time---------  -type- -keycode-  ---value----
+
+**应用程序编写方法**：
+
+.. code-block:: c
+    :linenos:
+
+    #include <stdio.h>
+    #include <linux/input.h>
+    #include <stdlib.h>
+    #include <sys/types.h>
+    #include <sys/stat.h>
+    #include <fcntl.h>
+    
+    #define DEV_PATH "/dev/input/event0"   //difference is possible
+    
+    int main(){
+        int keys_fd;
+        char ret[2];
+        struct input_event t;
+        keys_fd = open(DEV_PATH, O_RDONLY);
+        
+        if(keys_fd <= 0){
+            printf("open /dev/input/event0 device error!\n");
+            return -1;
+        }
+        
+        while(1){
+            if(read(keys_fd, &t, sizeof(t)) == sizeof(t)){
+                if(t.type==EV_KEY)
+                    if(t.value==0 || t.value==1){
+                        printf("key %d %s\n", t.code, (t.value) ? "Pressed" : "Released");
+                        if(t.code == KEY_ESC)
+                            break;
+                    }
+            }
+        }
+        close(keys_fd);
+        return 0;
+    }
+
+**增加repeat功能，修改代码为**：
+
+.. code-block:: c
+    :linenos:
+    
+    sunxikbd_dev->evbit[0] = BIT_MASK(EV_KEY)|BIT_MASK(EV_REP);
+
+增加repeat功能，长按按键测试：
+
+.. code-block:: shell
+    :linenos:
+
+    00000820  45 46 08 5d eb 61 07 00  01 00 73 00 01 00 00 00  |EF.].a....s.....|
+    00000830  45 46 08 5d eb 61 07 00  00 00 00 00 00 00 00 00  |EF.].a..........|
+    00000840  45 46 08 5d 2f 7f 0b 00  01 00 73 00 02 00 00 00  |EF.]/.....s.....|
+    00000850  45 46 08 5d 2f 7f 0b 00  00 00 00 00 01 00 00 00  |EF.]/...........|
+    00000860  45 46 08 5d 6d 1b 0c 00  01 00 73 00 02 00 00 00  |EF.]m.....s.....|
+    00000870  45 46 08 5d 6d 1b 0c 00  00 00 00 00 01 00 00 00  |EF.]m...........|
+    00000880  45 46 08 5d a9 b7 0c 00  01 00 73 00 02 00 00 00  |EF.]......s.....|
+    00000890  45 46 08 5d a9 b7 0c 00  00 00 00 00 01 00 00 00  |EF.]............|
+    000008a0  45 46 08 5d e8 53 0d 00  01 00 73 00 02 00 00 00  |EF.].S....s.....|
+    000008b0  45 46 08 5d e8 53 0d 00  00 00 00 00 01 00 00 00  |EF.].S..........|
+    000008c0  45 46 08 5d 27 f0 0d 00  01 00 73 00 02 00 00 00  |EF.]'.....s.....|
+    000008d0  45 46 08 5d 27 f0 0d 00  00 00 00 00 01 00 00 00  |EF.]'...........|
+    000008e0  45 46 08 5d 66 8c 0e 00  01 00 73 00 02 00 00 00  |EF.]f.....s.....|
+    000008f0  45 46 08 5d 66 8c 0e 00  00 00 00 00 01 00 00 00  |EF.]f...........|
+    00000900  45 46 08 5d a7 28 0f 00  01 00 73 00 02 00 00 00  |EF.].(....s.....|
+    00000910  45 46 08 5d a7 28 0f 00  00 00 00 00 01 00 00 00  |EF.].(..........|
+    00000920  46 46 08 5d a6 82 00 00  01 00 73 00 02 00 00 00  |FF.]......s.....|
+    00000930  46 46 08 5d a6 82 00 00  00 00 00 00 01 00 00 00  |FF.]............|
+    00000940  46 46 08 5d ec 1e 01 00  01 00 73 00 02 00 00 00  |FF.]......s.....|
+    00000950  46 46 08 5d ec 1e 01 00  00 00 00 00 01 00 00 00  |FF.]............|
+    00000960  46 46 08 5d 29 bb 01 00  01 00 73 00 02 00 00 00  |FF.]).....s.....|
+    00000970  46 46 08 5d 29 bb 01 00  00 00 00 00 01 00 00 00  |FF.])...........|
+    00000980  46 46 08 5d 68 57 02 00  01 00 73 00 02 00 00 00  |FF.]hW....s.....|
+    00000990  46 46 08 5d 68 57 02 00  00 00 00 00 01 00 00 00  |FF.]hW..........|
+    000009a0  46 46 08 5d a7 f3 02 00  01 00 73 00 02 00 00 00  |FF.]......s.....|
+    000009b0  46 46 08 5d a7 f3 02 00  00 00 00 00 01 00 00 00  |FF.]............|
+    000009c0  46 46 08 5d e7 8f 03 00  01 00 73 00 02 00 00 00  |FF.]......s.....|
+    000009d0  46 46 08 5d e7 8f 03 00  00 00 00 00 01 00 00 00  |FF.]............|
+    000009e0  46 46 08 5d 27 2c 04 00  01 00 73 00 02 00 00 00  |FF.]',....s.....|
+    000009f0  46 46 08 5d 27 2c 04 00  00 00 00 00 01 00 00 00  |FF.]',..........|
+    00000a00  46 46 08 5d 65 c8 04 00  01 00 73 00 02 00 00 00  |FF.]e.....s.....|
+    00000a10  46 46 08 5d 65 c8 04 00  00 00 00 00 01 00 00 00  |FF.]e...........|
+    00000a20  46 46 08 5d a8 64 05 00  01 00 73 00 02 00 00 00  |FF.].d....s.....|
+    00000a30  46 46 08 5d a8 64 05 00  00 00 00 00 01 00 00 00  |FF.].d..........|
+    00000a40  46 46 08 5d 4a b7 05 00  01 00 73 00 00 00 00 00  |FF.]J.....s.....|
+    00000a50  46 46 08 5d 4a b7 05 00  00 00 00 00 00 00 00 00  |FF.]J...........|
+
+挑出几组数据进行分析：
+
+.. code-block:: shell
+    :linenos:
+
+    //按键按下
+    00000820  45 46 08 5d eb 61 07 00  01 00 73 00 01 00 00 00  |EF.].a....s.....|
+
+    //按键repeat
+    00000840  45 46 08 5d 2f 7f 0b 00  01 00 73 00 02 00 00 00  |EF.]/.....s.....|
+
+    //按键松开
+    00000a40  46 46 08 5d 4a b7 05 00  01 00 73 00 00 00 00 00  |FF.]J.....s.....|    

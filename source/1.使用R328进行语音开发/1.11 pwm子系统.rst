@@ -1,0 +1,380 @@
+1.11 pwm子系统
+======================================
+
+1.11.1 配置文件
+--------------------------------------
+
+**sys_config.fex**：
+
+.. code-block:: text
+    :linenos:
+
+    ;----------------------------------------------------------------------------------
+    ;pwm config
+    ;----------------------------------------------------------------------------------
+    [pwm0]
+    pwm_used            = 1
+    pwm_positive        = port:PB00<3><0><default><default>
+
+    [pwm0_suspend]
+    pwm_positive        = port:PB00<7><0><default><default>
+
+    [pwm1]
+    pwm_used            = 0
+    pwm_positive        = port:PB01<3><0><default><default>
+
+    [pwm1_suspend]
+    pwm_positive        = port:PB01<7><0><default><default>
+
+    [pwm6]
+    pwm_used	    = 1
+    pwm_positive	    = port:PB06<3><0><default><default>
+
+    [pwm6_suspend]
+    pwm_positive	    = port:PB06<7><0><default><default>
+
+    [pwm7]
+    pwm_used	    = 1
+    pwm_positive	    = port:PB07<3><0><default><default>
+
+    [pwm7_suspend]
+    pwm_positive	    = port:PB07<7><0><default><default>    
+
+**设备树描述**：
+
+.. code-block:: text
+    :linenos:
+
+    pwm0@0 {
+        linux,phandle = <0x94>;
+        phandle = <0x94>;
+        allwinner,pins = "PB0";
+        allwinner,function = "pwm0";
+        allwinner,pname = "pwm_positive";
+        allwinner,muxsel = <0x3>;
+        allwinner,pull = <0x0>;
+        allwinner,drive = <0xffffffff>;
+        allwinner,data = <0xffffffff>;
+    };
+
+    pwm0@1 {
+        linux,phandle = <0x95>;
+        phandle = <0x95>;
+        allwinner,pins = "PB0";
+        allwinner,function = "pwm0";
+        allwinner,pname = "pwm_positive";
+        allwinner,muxsel = <0x7>;
+        allwinner,pull = <0x0>;
+        allwinner,drive = <0xffffffff>;
+        allwinner,data = <0xffffffff>;
+    };
+
+    pwm1@0 {
+        linux,phandle = <0x96>;
+        phandle = <0x96>;
+        allwinner,pins = "PB1";
+        allwinner,function = "pwm1";
+        allwinner,pname = "pwm_positive";
+        allwinner,muxsel = <0x3>;
+        allwinner,pull = <0x0>;
+        allwinner,drive = <0xffffffff>;
+        allwinner,data = <0xffffffff>;
+    };
+
+    pwm1@1 {
+        linux,phandle = <0x97>;
+        phandle = <0x97>;
+        allwinner,pins = "PB1";
+        allwinner,function = "pwm1";
+        allwinner,pname = "pwm_positive";
+        allwinner,muxsel = <0x7>;
+        allwinner,pull = <0x0>;
+        allwinner,drive = <0xffffffff>;
+        allwinner,data = <0xffffffff>;
+    };
+
+    pwm6@0 {
+        linux,phandle = <0x98>;
+        phandle = <0x98>;
+        allwinner,pins = "PB6";
+        allwinner,function = "pwm6";
+        allwinner,pname = "pwm_positive";
+        allwinner,muxsel = <0x3>;
+        allwinner,pull = <0x0>;
+        allwinner,drive = <0xffffffff>;
+        allwinner,data = <0xffffffff>;
+    };
+
+    pwm6@1 {
+        linux,phandle = <0x99>;
+        phandle = <0x99>;
+        allwinner,pins = "PB6";
+        allwinner,function = "pwm6";
+        allwinner,pname = "pwm_positive";
+        allwinner,muxsel = <0x7>;
+        allwinner,pull = <0x0>;
+        allwinner,drive = <0xffffffff>;
+        allwinner,data = <0xffffffff>;
+    };
+
+    pwm7@0 {
+        linux,phandle = <0x9a>;
+        phandle = <0x9a>;
+        allwinner,pins = "PB7";
+        allwinner,function = "pwm7";
+        allwinner,pname = "pwm_positive";
+        allwinner,muxsel = <0x3>;
+        allwinner,pull = <0x0>;
+        allwinner,drive = <0xffffffff>;
+        allwinner,data = <0xffffffff>;
+    };
+
+    pwm7@1 {
+        linux,phandle = <0x9b>;
+        phandle = <0x9b>;
+        allwinner,pins = "PB7";
+        allwinner,function = "pwm7";
+        allwinner,pname = "pwm_positive";
+        allwinner,muxsel = <0x7>;
+        allwinner,pull = <0x0>;
+        allwinner,drive = <0xffffffff>;
+        allwinner,data = <0xffffffff>;
+    };
+
+    pwm@0300a000 {
+        compatible = "allwinner,sunxi-pwm";
+        reg = <0x0 0x300a000 0x0 0x3ff>;
+        clocks = <0x53>;
+        pwm-number = <0x8>;
+        pwm-base = <0x0>;
+        pwms = <0x54 0x55 0x56 0x57 0x58 0x59 0x5a 0x5b>;
+    };
+
+    pwm0@0300a000 {
+        compatible = "allwinner,sunxi-pwm0";
+        pinctrl-names = "active", "sleep";
+        reg_base = <0x300a000>;
+        reg_peci_offset = <0x0>;
+        reg_peci_shift = <0x0>;
+        reg_peci_width = <0x1>;
+        reg_pis_offset = <0x4>;
+        reg_pis_shift = <0x0>;
+        reg_pis_width = <0x1>;
+        reg_crie_offset = <0x10>;
+        reg_crie_shift = <0x0>;
+        reg_crie_width = <0x1>;
+        reg_cfie_offset = <0x10>;
+        reg_cfie_shift = <0x1>;
+        reg_cfie_width = <0x1>;
+        reg_cris_offset = <0x14>;
+        reg_cris_shift = <0x0>;
+        reg_cris_width = <0x1>;
+        reg_cfis_offset = <0x14>;
+        reg_cfis_shift = <0x1>;
+        reg_cfis_width = <0x1>;
+        reg_clk_src_offset = <0x20>;
+        reg_clk_src_shift = <0x7>;
+        reg_clk_src_width = <0x2>;
+        reg_bypass_offset = <0x20>;
+        reg_bypass_shift = <0x5>;
+        reg_bypass_width = <0x1>;
+        reg_clk_gating_offset = <0x20>;
+        reg_clk_gating_shift = <0x4>;
+        reg_clk_gating_width = <0x1>;
+        reg_clk_div_m_offset = <0x20>;
+        reg_clk_div_m_shift = <0x0>;
+        reg_clk_div_m_width = <0x4>;
+        reg_pdzintv_offset = <0x30>;
+        reg_pdzintv_shift = <0x8>;
+        reg_pdzintv_width = <0x8>;
+        reg_dz_en_offset = <0x30>;
+        reg_dz_en_shift = <0x0>;
+        reg_dz_en_width = <0x1>;
+        reg_enable_offset = <0x40>;
+        reg_enable_shift = <0x0>;
+        reg_enable_width = <0x1>;
+        reg_cap_en_offset = <0x44>;
+        reg_cap_en_shift = <0x0>;
+        reg_cap_en_width = <0x1>;
+        reg_period_rdy_offset = <0x60>;
+        reg_period_rdy_shift = <0xb>;
+        reg_period_rdy_width = <0x1>;
+        reg_pul_start_offset = <0x60>;
+        reg_pul_start_shift = <0xa>;
+        reg_pul_start_width = <0x1>;
+        reg_mode_offset = <0x60>;
+        reg_mode_shift = <0x9>;
+        reg_mode_width = <0x1>;
+        reg_act_sta_offset = <0x60>;
+        reg_act_sta_shift = <0x8>;
+        reg_act_sta_width = <0x1>;
+        reg_prescal_offset = <0x60>;
+        reg_prescal_shift = <0x0>;
+        reg_prescal_width = <0x8>;
+        reg_entire_offset = <0x64>;
+        reg_entire_shift = <0x10>;
+        reg_entire_width = <0x10>;
+        reg_active_offset = <0x64>;
+        reg_active_shift = <0x0>;
+        reg_active_width = <0x10>;
+        linux,phandle = <0x54>;
+        phandle = <0x54>;
+        device_type = "pwm0";
+        pwm_used = <0x1>;
+        pinctrl-0 = <0x94>;
+        pinctrl-1 = <0x95>;
+    };
+    ...   
+
+**相关代码和内核配置**：
+
+.. code-block:: text
+    :linenos:
+
+    #lichee/linux-4.9/drivers/pwm/pwm-sunxi-new.c
+
+    obj-$(CONFIG_PWM_SUNXI)		+= pwm-sunxi.o
+    obj-$(CONFIG_PWM_SUNXI_NEW)	+= pwm-sunxi-new.o
+
+    choice
+        prompt "SUNXI PWM SELECT."
+
+    config PWM_SUNXI
+        tristate "Sunxi PWM support"
+        depends on PWM && ARCH_SUNXI
+        help
+        Generic PWM framework driver for sunxi.
+
+        To compile this driver as a module, choose M here: the module
+        will be called pwm-sunxi.
+
+    config PWM_SUNXI_NEW
+        tristate "Sunxi Enhance PWM support"
+        depends on PWM && ARCH_SUNXI && (ARCH_SUN8IW10 || ARCH_SUN8IW11 || \
+                ARCH_SUN8IW12 || ARCH_SUN50IW8 || ARCH_SUN8IW17) || \
+                ARCH_SUN8IW18 || ARCH_SUN8IW16 || ARCH_SUN50IW9
+        help
+        Enhance PWM framework driver for sunxi.
+
+        To compile this driver as a module, choose M here: the module
+        will be called pwm-sunxi.
+    endchoice   
+
+1.11.2 代码分析
+--------------------------------------
+
+**入口函数**：
+
+.. code-block:: c
+    :linenos:
+
+    static const struct of_device_id sunxi_pwm_match[] = {
+        { .compatible = "allwinner,sunxi-pwm", },
+        { .compatible = "allwinner,sunxi-s_pwm", },
+        {},
+    };
+
+    static struct platform_driver sunxi_pwm_driver = {
+        .probe = sunxi_pwm_probe,
+        .remove = sunxi_pwm_remove,
+        .suspend = sunxi_pwm_suspend,
+        .resume = sunxi_pwm_resume,
+        .driver = {
+            .name = "sunxi_pwm",
+            .owner  = THIS_MODULE,
+            .of_match_table = sunxi_pwm_match,
+        },
+    };
+
+    static int __init pwm_module_init(void)
+    {
+        int ret = 0;
+        pr_info("pwm module init!\n");
+        
+        if (ret == 0) {
+            ret = platform_driver_register(&sunxi_pwm_driver);
+        }
+
+        return ret;
+    }
+
+**sunxi_pwm_probe**：
+
+.. code-block:: c
+    :linenos:
+
+    //pwm私有数据
+    struct sunxi_pwm_chip *pwm;
+    pwm = devm_kzalloc(&pdev->dev, sizeof(*pwm), GFP_KERNEL);
+
+    pwm->base = (void __iomem *)of_iomap(pdev->dev.of_node, 0);
+
+    of_property_read_u32(np, "pwm-number", &pwm->chip.npwm);
+
+    of_property_read_u32(np, "pwm-base", &pwm->chip.base);
+
+    static struct pwm_ops sunxi_pwm_ops = {
+        .config = sunxi_pwm_config,
+        .enable = sunxi_pwm_enable,
+        .disable = sunxi_pwm_disable,
+        .set_polarity = sunxi_pwm_set_polarity,
+        .owner = THIS_MODULE,
+    };
+    pwm->chip.ops = &sunxi_pwm_ops;
+
+    //添加了8个pwm
+    pwmchip_add(&pwm->chip);
+
+    struct sunxi_pwm_config *config;
+    pwm->config = devm_kzalloc(&pdev->dev, sizeof(*pwm->config) * pwm->chip.npwm, GFP_KERNEL);
+
+    for (i = 0; i < pwm->chip.npwm; i++) {
+        sub_np = of_parse_phandle(np, "pwms", i);
+        //struct platform_device *pwm_pdevice;
+        pwm_pdevice = of_find_device_by_node(sub_np); 
+        sunxi_pwm_get_config(pwm_pdevice, &pwm->config[i]); //获取bind_pwm dead_time属性
+    }
+
+**如何设置pwm对应的gpio**：
+
+.. code-block:: c
+    :linenos:
+
+    sunxi_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm))
+    sunxi_pwm_enable_single(struct pwm_chip *chip, struct pwm_device *pwm)
+
+    //获取pwm index
+    index = pwm->pwm - chip->base;
+    //获取index对应的handle
+    sub_np = of_parse_phandle(chip->dev->of_node, "pwms", index);
+    //寻找对应的 platform_device
+    pwm_pdevice = of_find_device_by_node(sub_np);
+    //pinctrl设置
+    sunxi_pwm_pin_set_state(&pwm_pdevice->dev, PWM_PIN_STATE_ACTIVE);
+
+1.11.3 测试
+--------------------------------------
+
+.. code-block:: c
+    :linenos:
+
+    #include <linux/pwm.h>
+
+    struct pwm_device * pwm0 = NULL; //初始化一个pwm设备的结构体变量
+    pwm0 = pwm_request(6, "pwm0");//申请pwm设备函数，前面是pwm几，后面是给他的简称
+    if(IS_ERR(pwm0))//申请有无成功
+        printk("pwm0 err %ld\n", PTR_ERR(pwm0));
+    else
+        printk("pwm0 success\n");
+
+    pwm_config(pwm0, 1200000, 5000000);
+    pwm_enable(pwm0);//将pwm使能，打开 
+
+    /*	
+    Pwm_config函数有三个参数，第一个是当前设置的pwm设备，第二个和第三个分别是占空比与周期。 
+    占空比与周期的单位均是ns， 
+    其中5000000ns即表示5ms，说明一个波形的周期是5ms 
+    其中1200000ns即表示1.2ms，说明一个波形中电平值为高时持续时间为1.2ms
+    */ 
+
+驱动加载上面的代码，该gpio口会产品pwm波形。    

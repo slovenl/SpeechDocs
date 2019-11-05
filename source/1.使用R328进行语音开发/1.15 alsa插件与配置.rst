@@ -1,0 +1,113 @@
+1.15 alsa插件与配置
+======================================
+
+1.15.1 alsa自带插件使用方法
+--------------------------------------
+
+**dmix**：播放时该声卡可以被多个进程同时打开写
+
+.. code-block:: text
+    :linenos:
+
+    pcm.playback {
+        type dmix
+        ipc_key 1024
+        slave {
+            pcm "hw:audiocodec,0"
+            rate 48000
+            channels 1
+            period_time 8000
+        }
+    }
+
+    pcm.alg_out {
+            type dmix
+            ipc_key 1026
+            slave {
+            pcm "hw:snddaudio0,0"
+            rate 16000
+            channels 1
+            period_time 8000
+        }
+    }
+
+    pcm.usb_play {
+        type dmix
+        ipc_key 1030
+        slave {
+            pcm "hw:UAC1Gadget,0"
+            rate 16000
+            channels 1
+            period_time 8000
+        }
+    }
+
+**dsnoop**：录音时该声卡可以被多个进程同时打开读
+
+.. code-block:: text
+    :linenos:
+
+    pcm.record_3adc {
+        type dsnoop
+        ipc_key 1025
+        slave {
+            pcm "hw:audiocodec,0"
+            rate 16000
+            channels 3
+            period_time 32000
+        }
+    }
+
+    pcm.record_dmic{
+        type dsnoop
+        ipc_key 1027
+        slave {
+            pcm "hw:snddmic,0"
+            rate 16000
+            channels 8
+            period_time 32000
+        }	
+    }
+
+    pcm.usb_record {
+        type dsnoop
+        ipc_key 1028
+        slave {
+            pcm "hw:UAC1Gadget,0"
+            rate 48000
+            channels 1
+            period_time 8000
+        }	
+    }
+
+**multi**：多个声卡的通道重新组织成一个声卡
+
+.. code-block:: text
+    :linenos:
+
+    pcm.record_all {
+        type multi
+
+        slaves.a.pcm "hw:snddmic,0"
+        slaves.a.channels 8
+        slaves.b.pcm "hw:audiocodec,0"
+        slaves.b.channels 3
+        
+        bindings.0.slave a
+        bindings.0.channel 0
+        bindings.1.slave a
+        bindings.1.channel 2
+        bindings.2.slave a
+        bindings.2.channel 4
+        bindings.3.slave a
+        bindings.3.channel 6
+        bindings.4.slave b
+        bindings.4.channel 2
+        bindings.5.slave b
+        bindings.5.channel 0
+        bindings.6.slave b
+        bindings.6.channel 1
+    }
+
+
+

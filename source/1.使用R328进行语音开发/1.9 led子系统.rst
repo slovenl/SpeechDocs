@@ -1,0 +1,320 @@
+1.9 led子系统
+======================================
+
+1.9.1 配置文件
+--------------------------------------
+
+**sys_config.fex**：
+
+.. code-block:: text
+    :linenos:
+
+    [ledc]
+    ledc_used	= 0
+    ledc		= port:PE02<2><default><default><default>
+    led_count	= 1
+    output_mode	= "RGB"
+    t1h_ns		= 800
+    t1l_ns		= 450
+    t0h_ns		= 400
+    t0l_ns		= 850
+
+**设备树描述**：
+
+.. code-block:: text
+    :linenos:
+
+    ledc@0 {
+        linux,phandle = <0x91>;
+        phandle = <0x91>;
+        allwinner,pins = "PE2";
+        allwinner,function = "ledc";
+        allwinner,pname = "ledc";
+        allwinner,muxsel = <0x2>;
+        allwinner,pull = <0xffffffff>;
+        allwinner,drive = <0xffffffff>;
+        allwinner,data = <0xffffffff>;
+    };
+
+    ledc@1 {
+        allwinner,pins = "PB0";
+        allwinner,function = "io_disabled";
+        allwinner,muxsel = <0x7>;
+        allwinner,drive = <0x1>;
+        allwinner,pull = <0x0>;
+        linux,phandle = <0x7e>;
+        phandle = <0x7e>;
+    };
+
+    ledc@0x06700000 {
+        #address-cells = <0x1>;
+        #size-cells = <0x0>;
+        compatible = "allwinner,sunxi-leds";
+        reg = <0x0 0x6700000 0x0 0x50>;
+        interrupts = <0x0 0x3c 0x4>;
+        interrupt-names = "ledcirq";
+        clocks = <0x7b 0x7c>;
+        clock-names = "clk_ledc", "clk_cpuapb";
+        pinctrl-names = "default", "sleep";
+        pinctrl-1 = <0x7e>;
+        led_count = <0x1>;
+        output_mode = "RGB";
+        reset_ns = <0x54>;
+        t1h_ns = <0x320>;
+        t1l_ns = <0x1c2>;
+        t0h_ns = <0x190>;
+        t0l_ns = <0x352>;
+        wait_time0_ns = <0x54>;
+        wait_time1_ns = <0x54>;
+        wait_data_time_ns = <0x927c0>;
+        device_type = "ledc";
+        status = "disabled";
+        pinctrl-0 = <0x91>;
+    };
+
+**相关源代码和内核配置**：
+
+.. code-block:: text
+    :linenos:
+
+    lichee/linux-4.9/drivers/leds/leds-sunxi.c
+
+    config LEDS_SUNXI
+        tristate "LED support for Allwinner platforms"
+        depends on ARCH_SUNXI
+        depends on LEDS_CLASS
+        help
+        This option enabled support for the LEDs on the Allwinner
+        platforms. Say Y to enabled these.
+
+    obj-$(CONFIG_LEDS_SUNXI)		+= leds-sunxi.o
+
+1.9.2 代码分析
+--------------------------------------    
+
+**入口函数**：
+
+.. code-block:: c
+    :linenos:
+
+    static const struct of_device_id sunxi_led_dt_ids[] = {
+        {.compatible = "allwinner,sunxi-leds"},
+        {},
+    };
+
+    static struct platform_driver sunxi_led_driver = {
+        .probe		= sunxi_led_probe,
+        .remove		= sunxi_led_remove,
+        .driver		= {
+            .name	= "sunxi-leds",
+            .owner	= THIS_MODULE,
+            .pm	= SUNXI_LED_DEV_PM_OPS,
+            .of_match_table = sunxi_led_dt_ids,
+        },
+    };
+
+    module_platform_driver(sunxi_led_driver);
+
+**sunxi_led_probe**：
+
+.. code-block:: c
+    :linenos:
+
+    //led私有数据
+    struct sunxi_led *led;
+    kzalloc(sizeof(struct sunxi_led), GFP_KERNEL);
+
+    //获取设备树信息
+    sunxi_get_u32_of_property("led_count", &val);
+    led->led_count = val;
+
+    led->output_mode.val = SUNXI_OUTPUT_GRB;
+    sunxi_get_str_of_property("output_mode", &str);
+    memcpy(led->output_mode.str, str, 3);
+
+    sunxi_get_str_of_property("led_regulator", &str);
+    strcpy(led->regulator_id, str);
+
+    sunxi_get_u32_of_property("reset_ns", &val);
+    led->reset_ns = val;
+
+    sunxi_get_u32_of_property("t1h_ns", &val);
+    led->t1h_ns = val;
+
+    sunxi_get_u32_of_property("t1l_ns", &val);
+    led->t1l_ns = val;
+
+    sunxi_get_u32_of_property("t0h_ns", &val);
+    led->t0h_ns = val;
+
+    sunxi_get_u32_of_property("t0l_ns", &val);
+    led->t0l_ns = val;
+
+    sunxi_get_u32_of_property("wait_time0_ns", &val);
+    led->wait_time0_ns = val;
+
+    sunxi_get_u32_of_property("wait_time1_ns", &val);
+    led->wait_time1_ns = val;
+
+    sunxi_get_u32_of_property("wait_data_time_ns", &val);
+    led->wait_data_time_ns = val;
+
+    //注册到led子系统中
+    //struct sunxi_led *led
+    led->pcdev_group = kzalloc(size, GFP_KERNEL);
+
+    //struct led_classdev cdev;
+    //struct led_classdev *pcdev;
+    //Red
+    led->pcdev_group[i].r.type = LED_TYPE_R;
+    pcdev = &led->pcdev_group[i].r.cdev;
+    pcdev->name = kzalloc(16, GFP_KERNEL);
+    sprintf((char *)pcdev->name, "sunxi_led%dr", i);
+    pcdev->brightness = LED_OFF;
+    pcdev->brightness_set_blocking = sunxi_set_led_brightness;  //真正设置brightness属性的操作
+    led_classdev_register(dev, pcdev);
+
+    //Green
+    led->pcdev_group[i].g.type = LED_TYPE_G;
+    pcdev = &led->pcdev_group[i].g.cdev;
+    pcdev->name = kzalloc(16, GFP_KERNEL);
+    sprintf((char *)pcdev->name, "sunxi_led%dg", i);
+    pcdev->brightness = LED_OFF;
+    pcdev->brightness_set_blocking = sunxi_set_led_brightness;
+    led_classdev_register(dev, pcdev);
+
+    //Blue
+    led->pcdev_group[i].b.type = LED_TYPE_B;
+    pcdev = &led->pcdev_group[i].b.cdev;
+    pcdev->name = kzalloc(16, GFP_KERNEL);
+    sprintf((char *)pcdev->name, "sunxi_led%db", i);
+    pcdev->brightness = LED_OFF;
+    pcdev->brightness_set_blocking = sunxi_set_led_brightness;
+    led_classdev_register(dev, pcdev);
+
+    //led寄存器和相关设置
+    led->iomem_reg_base = ioremap(SUNXI_LEDC_REG_BASE_ADDR,LEDC_TOTAL_REG_SIZE);
+    sunxi_ledc_set_time(led);
+
+    //获取对应的clk
+    sunxi_clk_init(led);
+
+    //申请中断
+    sunxi_ledc_irq_init(led)
+
+    //pinctrl选择defalut
+    sunxi_ledc_pinctrl_init(led);
+
+    //申请中断
+    dma_cap_zero(mask);
+    dma_cap_set(DMA_SLAVE, mask);
+    led->dma_chan = dma_request_channel(mask, NULL, NULL);
+
+    //注册/sys/class/led
+    static struct class led_class = {
+        .name		= "led",
+        .owner		= THIS_MODULE,
+        .class_attrs	= led_class_attrs,
+    };
+    class_register(&led_class);    
+
+1.9.3 代码测试
+--------------------------------------  
+
+**打开ledc功能**：
+
+.. code-block:: text
+    :linenos:
+
+    [ledc]
+    ledc_used	= 1
+    compatible = "allwinner,sunxi-leds";
+    ledc		= port:PE02<2><default><default><default>
+    led_count	= 1
+    output_mode	= "RGB"
+    t1h_ns		= 800
+    t1l_ns		= 450
+    t0h_ns		= 400
+    t0l_ns		= 850
+
+    ledc@0x06700000 {
+        #address-cells = <0x1>;
+        #size-cells = <0x0>;
+        compatible = "allwinner,sunxi-leds";
+        reg = <0x0 0x6700000 0x0 0x50>;
+        interrupts = <0x0 0x3c 0x4>;
+        interrupt-names = "ledcirq";
+        clocks = <0x7b 0x7c>;
+        clock-names = "clk_ledc", "clk_cpuapb";
+        pinctrl-names = "default", "sleep";
+        pinctrl-1 = <0x7e>;
+        led_count = <0x1>;
+        output_mode = "RGB";
+        reset_ns = <0x54>;
+        t1h_ns = <0x320>;
+        t1l_ns = <0x1c2>;
+        t0h_ns = <0x190>;
+        t0l_ns = <0x352>;
+        wait_time0_ns = <0x54>;
+        wait_time1_ns = <0x54>;
+        wait_data_time_ns = <0x927c0>;
+        device_type = "ledc";
+        status = "okay";
+        pinctrl-0 = <0x91>;
+    }; 
+
+**生成的sysfs文件**：
+
+.. code-block:: shell
+    :linenos:
+
+    //platform device
+    ./sys/devices/platform/soc/ledc
+    ./sys/bus/platform/devices/ledc -> ../../../devices/platform/soc/ledc
+
+    //platform driver
+    ./sys/bus/platform/drivers/sunxi-leds
+
+    //注册的led子系统
+    root@TinaLinux:/# ls -l ./sys/devices/platform/soc/ledc/leds
+    drwxr-xr-x    3 root     root             0 Jan  1  1970 sunxi_led0b
+    drwxr-xr-x    3 root     root             0 Jan  1  1970 sunxi_led0g
+    drwxr-xr-x    3 root     root             0 Jan  1  1970 sunxi_led0r
+
+    root@TinaLinux:/# ls -l ./sys/class/leds
+    lrwxrwxrwx    1 root     root       0 Jan  1  1970 sunxi_led0b -> ../../devices/platform/soc/ledc/leds/sunxi_led0b
+    lrwxrwxrwx    1 root     root       0 Jan  1  1970 sunxi_led0g -> ../../devices/platform/soc/ledc/leds/sunxi_led0g
+    lrwxrwxrwx    1 root     root       0 Jan  1  1970 sunxi_led0r -> ../../devices/platform/soc/ledc/leds/sunxi_led0r  
+
+**点亮led灯**：
+
+.. code-block:: shell
+    :linenos:
+
+    echo 255 > /sys/class/leds/sunxi_led0b/brightness
+
+**内核自带led灯效**：
+
+.. code-block:: shell
+    :linenos:
+
+    //支持的灯效类型
+    cat /sys/class/leds/sunxi_led0b/trigger
+    [none] rfkill0 mmc0 timer default-on 
+
+    //开始闪烁
+    echo timer > /sys/class/leds/sunxi_led0b/trigger
+
+    //其他灯效代码
+    obj-$(CONFIG_LEDS_TRIGGER_TIMER)	+= ledtrig-timer.o
+    obj-$(CONFIG_LEDS_TRIGGER_ONESHOT)	+= ledtrig-oneshot.o
+    obj-$(CONFIG_LEDS_TRIGGER_DISK)		+= ledtrig-disk.o
+    obj-$(CONFIG_LEDS_TRIGGER_MTD)		+= ledtrig-mtd.o
+    obj-$(CONFIG_LEDS_TRIGGER_HEARTBEAT)	+= ledtrig-heartbeat.o
+    obj-$(CONFIG_LEDS_TRIGGER_BACKLIGHT)	+= ledtrig-backlight.o
+    obj-$(CONFIG_LEDS_TRIGGER_GPIO)		+= ledtrig-gpio.o
+    obj-$(CONFIG_LEDS_TRIGGER_CPU)		+= ledtrig-cpu.o
+    obj-$(CONFIG_LEDS_TRIGGER_DEFAULT_ON)	+= ledtrig-default-on.o
+    obj-$(CONFIG_LEDS_TRIGGER_TRANSIENT)	+= ledtrig-transient.o
+    obj-$(CONFIG_LEDS_TRIGGER_CAMERA)	+= ledtrig-camera.o
+    obj-$(CONFIG_LEDS_TRIGGER_PANIC)	+= ledtrig-panic.o

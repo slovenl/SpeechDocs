@@ -1,0 +1,103 @@
+1.1 uBuntu18.04开发环境搭建
+======================================
+
+1.1.1 编译
+--------------------------------------
+
+**gcc/g++降级到5(目前5.5)**：可以采用sudo update-alternatives --config进行gcc和g++默认版本的切换。
+
+**软件包安装**：
+
+.. code-block:: shell
+    :linenos:
+
+    sudo apt-get install build-essential subversion git-core libncurses5-dev 
+    zlib1g-dev gawk flex quilt libssl-dev xsltproc libxml-parser-perl 
+    mercurial bzr ecj cvs unzip ia32-libs
+
+**编译命令**：编译完成后系统镜像会自动打包在tina/out/< board >/目录下。
+
+.. code-block:: shell
+    :linenos:
+
+    source build/envsetup.sh
+    lunch       //R328 S2选择cowbell S3选择drum_std
+    make -j16
+    pack -d
+
+**修改错误**：由于18.04环境的一些变化，在编译的过程中会出现错误。
+
+错误1:
+
+.. code-block:: shell
+    :linenos:
+
+    Unescaped left brace in regex is illegal here in regex; marked by <-- HERE in m/\${ <-- HERE
+    ([^ \t=:+{}]+)}/ at ./bin/automake.tmp line 3938.
+
+    原因是Perl不不⽀支持以前的写法 修改automake源码
+    # substitute_ac_subst_variables ($TEXT)
+    # -------------------------------------
+    # Replace any occurrence of ${FOO} in $TEXT by @FOO@ if FOO is an AC_SUBST 8 # variable.
+    sub substitute_ac_subst_variables
+    {
+    my ($text) = @_;
+    # $text =~ s/\${([^ \t=:+{}]+)}/substitute_ac_subst_variables_worker ($1)/ge;
+    $text =~ s/\$[{]([^ \t=:+{}]+)}/substitute_ac_subst_variables_worker ($1)/ge;
+    return $text;
+    }
+
+错误2：
+
+.. code-block:: shell
+    :linenos:
+
+    /home/jay/R328/rxx_tina3.0_git/out/cowbell-perf1/compile_dir/host/u-boot-
+    2014.10/lib/rsa/rsa-sign.c:279:21: error: dereferencing pointer to incomplete type 'RSA {aka
+    struct rsa_st}'
+    if (BN_num_bits(key->e) > 64)
+
+    OpenSSL 1.1.x对⼀一些API做了了改动，因此出现错误信息。 修改uboot patch如下
+    https://github.com/openwrt/openwrt/commit/70b104f98c0657323b28fce140b73a94bf3eb756
+
+**添加日期文件**：编译的过程因为目前的SDK没有带git的相关信息，还需要执行如下命令：
+
+.. code-block:: shell
+    :linenos:
+
+    date +%s > version.date
+
+1.1.2 重要配置文件
+--------------------------------------
+
+**内核配置文件**：
+
+.. code-block:: shell
+    :linenos:
+
+    target/allwinner/generic/config-4.9  通用的内核config
+    target/allwinner/drum-std/config-4.9 board内核config 对通用的内核config进行修改或补充
+    系统会根据这两个文件组合成.config
+    在make kernel_menuconfig进行配置后，会自动修改这两个内核配置文件/
+
+**设备树配置文件**：
+
+.. code-block:: shell
+    :linenos:
+
+    设备树配置文件
+    target/allwinner/drum-std/configs sys_config.fex
+    最终使用的dts文件：
+    out/drum_std/image/.sunxidts
+    基础设备树配置文件
+    lichee/linux-4.9/arch/arm/boot/dts/sun8iw18p1.dtsi
+    //注意：修改了sys_config.fex后pack才会更新dts文件 
+
+**package配置文件**：
+
+.. code-block:: shell
+    :linenos:
+
+    target/allwinner/drum-std/defconfig
+    在make menuconfig进行配置后，会自动修改该文件
+    

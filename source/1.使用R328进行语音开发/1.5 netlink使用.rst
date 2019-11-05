@@ -1,0 +1,278 @@
+1.5 netlink使用
+======================================
+
+1.5.1 netlink简介
+--------------------------------------
+
+Netlink套接字是用以实现用户进程与内核进程通信的一种特殊的进程间通信(IPC) ,也是网络应用程序与内核通信的最常用的接口。\
+在Linux 内核中，使用netlink 进行应用与内核通信的应用有很多，如：
+
+* 路由 daemon（NETLINK_ROUTE）
+* 用户态 socket 协议（NETLINK_USERSOCK）
+* 防火墙（NETLINK_FIREWALL）
+* netfilter 子系统（NETLINK_NETFILTER）
+* 内核事件向用户态通知（NETLINK_KOBJECT_UEVENT）
+* 通用netlink（NETLINK_GENERIC）
+
+Netlink 是一种在内核与用户应用间进行双向数据传输的非常好的方式，用户态应用使用标准的 socket API 就可以使用 netlink 提供的强大功能，\
+内核态需要使用专门的内核 API 来使用 netlink。\
+一般来说用户空间和内核空间的通信方式有三种：/proc、ioctl、Netlink。而前两种都是单向的，而Netlink可以实现双工通信。
+
+Netlink 相对于系统调用，ioctl 以及 /proc文件系统而言，具有以下优点：
+
+* netlink使用简单，只需要在include/linux/netlink.h中增加一个新类型的 netlink 协议定义即可,\
+  (如 #define NETLINK_TEST 20 然后，内核和用户态应用就可以立即通过 socket API 使用该 netlink 协议类型进行数据交换)
+* netlink是一种异步通信机制，在内核与用户态应用之间传递的消息保存在socket缓存队列中，\
+  发送消息只是把消息保存在接收者的socket的接收队列，而不需要等待接收者收到消息。
+* 使用netlink的内核部分可以采用模块的方式实现，使用netlink的应用部分和内核部分没有编译时依赖。
+* netlink 支持多播，内核模块或应用可以把消息多播给一个netlink组，属于该neilink组的任何内核模块或应用都能接收到该消，
+  内核事件向用户态的通知机制就使用了这一特性。
+* 内核可以使用netlink首先发起会话。
+
+Netlink协议基于BSD socket和AF_NETLINK地址簇，使用32位的端口号寻址，\
+每个Netlink协议通常与一个或一组内核服务/组件相关联，\
+如NETLINK_ROUTE用于获取和设置路由与链路信息、NETLINK_KOBJECT_UEVENT用于内核向用户空间的udev进程发送通知等。
+
+.. code-block:: c
+    :linenos:
+
+    #define NETLINK_ROUTE       0   /* Routing/device hook              */
+    #define NETLINK_UNUSED      1   /* Unused number                */
+    #define NETLINK_USERSOCK    2   /* Reserved for user mode socket protocols  */
+    #define NETLINK_FIREWALL    3   /* Unused number, formerly ip_queue     */
+    #define NETLINK_SOCK_DIAG   4   /* socket monitoring                */
+    #define NETLINK_NFLOG       5   /* netfilter/iptables ULOG */
+    #define NETLINK_XFRM        6   /* ipsec */
+    #define NETLINK_SELINUX     7   /* SELinux event notifications */
+    #define NETLINK_ISCSI       8   /* Open-iSCSI */
+    #define NETLINK_AUDIT       9   /* auditing */
+    #define NETLINK_FIB_LOOKUP  10  
+    #define NETLINK_CONNECTOR   11
+    #define NETLINK_NETFILTER   12  /* netfilter subsystem */
+    #define NETLINK_IP6_FW      13
+    #define NETLINK_DNRTMSG     14  /* DECnet routing messages */
+    #define NETLINK_KOBJECT_UEVENT  15  /* Kernel messages to userspace */
+    #define NETLINK_GENERIC     16
+    /* leave room for NETLINK_DM (DM Events) */
+    #define NETLINK_SCSITRANSPORT   18  /* SCSI Transports */
+    #define NETLINK_ECRYPTFS    19
+    #define NETLINK_RDMA        20
+    #define NETLINK_CRYPTO      21  /* Crypto layer */
+
+    #define NETLINK_INET_DIAG   NETLINK_SOCK_DIAG
+
+    #define MAX_LINKS 32
+
+1.5.2 netlink测试
+--------------------------------------
+
+**用户态程序**：
+
+.. code-block:: c
+    :linenos:
+
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <sys/socket.h>
+    #include <string.h>
+    #include <linux/netlink.h>
+    #include <stdint.h>
+    #include <unistd.h>
+    #include <errno.h>
+
+    #define NETLINK_TEST    30
+    #define MSG_LEN            125
+    #define MAX_PLOAD        125
+
+    typedef struct _user_msg_info
+    {
+        struct nlmsghdr hdr;
+        char  msg[MSG_LEN];
+    } user_msg_info;
+
+    int main(int argc, char **argv)
+    {
+        int skfd;
+        int ret;
+        user_msg_info u_info;
+        socklen_t len;
+        struct nlmsghdr *nlh = NULL;
+        struct sockaddr_nl saddr, daddr;
+        char *umsg = "hello netlink!!";
+
+        /* 创建NETLINK socket */
+        skfd = socket(AF_NETLINK, SOCK_RAW, NETLINK_TEST);
+        if(skfd == -1)
+        {
+            perror("create socket error\n");
+            return -1;
+        }
+
+        memset(&saddr, 0, sizeof(saddr));
+        saddr.nl_family = AF_NETLINK; //AF_NETLINK
+        saddr.nl_pid = 100;  //端口号(port ID) 
+        saddr.nl_groups = 0;
+        if(bind(skfd, (struct sockaddr *)&saddr, sizeof(saddr)) != 0)
+        {
+            perror("bind() error\n");
+            close(skfd);
+            return -1;
+        }
+
+        memset(&daddr, 0, sizeof(daddr));
+        daddr.nl_family = AF_NETLINK;
+        daddr.nl_pid = 0; // to kernel 
+        daddr.nl_groups = 0;
+        
+        //宏NLMSG_SPACE(len)返回不小于NLMSG_LENGTH(len)且字节对齐的最小数值 */
+        nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(MAX_PLOAD));
+        memset(nlh, 0, sizeof(struct nlmsghdr));
+        nlh->nlmsg_len = NLMSG_SPACE(MAX_PLOAD);
+        nlh->nlmsg_flags = 0;
+        nlh->nlmsg_type = 0;
+        nlh->nlmsg_seq = 0;
+        nlh->nlmsg_pid = saddr.nl_pid; //self port
+
+        //这里有bug 不应该发送nlmsg_len长度的信息 实际信息多长就发送多长
+        memcpy(NLMSG_DATA(nlh), umsg, strlen(umsg));
+        ret = sendto(skfd, nlh, nlh->nlmsg_len, 0, (struct sockaddr *)&daddr, sizeof(struct sockaddr_nl));
+        if(!ret)
+        {
+            perror("sendto error\n");
+            close(skfd);
+            exit(-1);
+        }
+        printf("send kernel:%s\n", umsg);
+
+        memset(&u_info, 0, sizeof(u_info));
+        len = sizeof(struct sockaddr_nl);
+        ret = recvfrom(skfd, &u_info, sizeof(user_msg_info), 0, (struct sockaddr *)&daddr, &len);
+        if(!ret)
+        {
+            perror("recv form kernel error\n");
+            close(skfd);
+            exit(-1);
+        }
+
+        printf("from kernel:%s\n", u_info.msg);
+        close(skfd);
+
+        free((void *)nlh);
+        return 0;
+    }
+
+**内核驱动代码**：
+
+.. code-block:: c
+    :linenos:
+
+    #include <linux/init.h>
+    #include <linux/module.h>
+    #include <linux/types.h>
+    #include <net/sock.h>
+    #include <linux/netlink.h>
+
+    #define NETLINK_TEST     30
+    #define MSG_LEN            125
+    #define USER_PORT        100
+
+    MODULE_LICENSE("GPL");
+    MODULE_AUTHOR("zhangwj");
+    MODULE_DESCRIPTION("netlink example");
+
+    struct sock *nlsk = NULL;
+    extern struct net init_net;
+
+    int send_usrmsg(char *pbuf, uint16_t len)
+    {
+        struct sk_buff *nl_skb;
+        struct nlmsghdr *nlh;
+
+        int ret;
+
+        /* 创建sk_buff 空间 */
+        nl_skb = nlmsg_new(len, GFP_ATOMIC);
+        if(!nl_skb)
+        {
+            printk("netlink alloc failure\n");
+            return -1;
+        }
+
+        /* 设置netlink消息头部 */
+        nlh = nlmsg_put(nl_skb, 0, 0, NETLINK_TEST, len, 0);
+        if(nlh == NULL)
+        {
+            printk("nlmsg_put failaure \n");
+            nlmsg_free(nl_skb);
+            return -1;
+        }
+
+        /* 拷贝数据发送 */
+        memcpy(nlmsg_data(nlh), pbuf, len);
+        ret = netlink_unicast(nlsk, nl_skb, USER_PORT, MSG_DONTWAIT);
+
+        return ret;
+    }
+
+    static void netlink_rcv_msg(struct sk_buff *skb)
+    {
+        struct nlmsghdr *nlh = NULL;
+        char *umsg = NULL;
+        char *kmsg = "hello users!!!";
+
+        if(skb->len >= nlmsg_total_size(0))
+        {
+            nlh = nlmsg_hdr(skb);
+            umsg = NLMSG_DATA(nlh);
+            if(umsg)
+            {            
+                printk("kernel recv from user: %s\n", umsg);
+                send_usrmsg(kmsg, strlen(kmsg));
+            }
+        }
+    }
+
+    struct netlink_kernel_cfg cfg = { 
+            .input  = netlink_rcv_msg, /* set recv callback */
+    };  
+
+    int test_netlink_init(void)
+    {
+        /* create netlink socket */
+        nlsk = (struct sock *)netlink_kernel_create(&init_net, NETLINK_TEST, &cfg);
+        if(nlsk == NULL)
+        {   
+            printk("netlink_kernel_create error !\n");
+            return -1; 
+        }   
+        printk("test_netlink_init\n");
+        
+        return 0;
+    }
+
+    void test_netlink_exit(void)
+    {
+        if (nlsk){
+            netlink_kernel_release(nlsk); /* release ..*/
+            nlsk = NULL;
+        }   
+        printk("test_netlink_exit!\n");
+    }
+
+    module_init(test_netlink_init);
+    module_exit(test_netlink_exit);    
+
+**测试结果**：
+
+.. code-block:: shell
+    :linenos:
+
+    //先加载驱动
+    root@TinaLinux:/tmp# insmod gpio_test.ko 
+    [10014.338526] test_netlink_init
+
+    //执行应用程序
+    root@TinaLinux:/tmp# ./helloworld 
+    [10016.341696] kernel recv from user: hello netlink!!atory  //bug
+    send kernel:hello netlink!!
+    from kernel:hello users!!!
